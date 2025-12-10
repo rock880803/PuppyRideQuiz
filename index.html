@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>狗狗的兜風探險</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0;
+            overflow: hidden; 
+        }
+
+        /* Star Animation */
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.2; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+        }
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite ease-in-out;
+        }
+        
+        /* Road Perspective Animation */
+        .perspective-container {
+            perspective: 300px; /* Deep perspective */
+            overflow: hidden;
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+        
+        .road-plane {
+            position: absolute;
+            bottom: -50%;
+            left: -50%;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(to bottom, #1e293b 0%, #0f172a 100%);
+            transform: rotateX(75deg); /* Flatter road */
+            transform-origin: center bottom;
+            z-index: 5;
+        }
+
+        .road-line {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 8px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.4);
+            transform: translateX(-50%);
+            mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
+        }
+
+        @keyframes roadMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100px; }
+        }
+
+        .moving-road-texture {
+             background-image: linear-gradient(to bottom, transparent 50%, rgba(255,255,255,0.6) 50%);
+             background-size: 100% 60px; 
+             animation: roadMove 0.4s linear infinite; /* Faster feel */
+        }
+        
+        .paused-road {
+            animation-play-state: paused;
+        }
+        
+        /* --- SCOOTER VIBRATIONS --- */
+        
+        /* 1. Idle Vibration (High frequency, low amplitude) */
+        @keyframes vibration-idle {
+            0% { transform: translate(0, 0); }
+            20% { transform: translate(-0.5px, 0.5px); }
+            40% { transform: translate(-0.5px, -0.5px); }
+            60% { transform: translate(0.5px, 0.5px); }
+            80% { transform: translate(0.5px, -0.5px); }
+            100% { transform: translate(0, 0); }
+        }
+        .vibe-idle {
+            animation: vibration-idle 0.05s infinite linear; /* Very fast buzz */
+        }
+
+        /* 2. Moving Vibration (Lower frequency, larger amplitude bumps) */
+        @keyframes vibration-moving {
+            0% { transform: translateY(0); }
+            25% { transform: translateY(1px); }
+            50% { transform: translateY(0); }
+            75% { transform: translateY(1.5px); }
+            100% { transform: translateY(0); }
+        }
+        .vibe-moving {
+            animation: vibration-moving 0.15s infinite ease-in-out;
+        }
+
+        /* Heart Floating Animation */
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            20% { opacity: 1; }
+            100% { transform: translateY(-120px) scale(1.5); opacity: 0; }
+        }
+        .heart {
+            position: absolute;
+            color: #fda4af;
+            font-size: 24px;
+            animation: floatUp 2.5s linear infinite;
+        }
+
+        /* Hug Animation */
+        @keyframes hugSqueeze {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+        .hug-container {
+            animation: hugSqueeze 2.5s ease-in-out infinite;
+        }
+        
+        /* Tail Wag Animation */
+        @keyframes tailWag {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(20deg); }
+        }
+        .tail-wag {
+            /* Anchor point is now correctly set in inline style */
+            animation: tailWag 0.5s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- Data: Questions & Results ---
+        const LOCATIONS = {
+            BITAN: { id: 'bitan', name: '碧潭', icon: '🌉', desc: '浪漫吊橋與水岸夜色，適合輕鬆散步。', tags: ['捷運可達', '平地', '浪漫'] },
+            HONGLUDI: { id: 'hongludi', name: '烘爐地', icon: '🛕', desc: '超廣角百萬夜景兼求財，視野極佳。', tags: ['開車/騎車', '爬樓梯', '祈福'] },
+            DADAOCHENG: { id: 'dadaocheng', name: '大稻埕', icon: '🚢', desc: '貨櫃市集與河岸微風，Chill 的首選。', tags: ['捷運+步行', '平地', '美食'] },
+            YANGMINGSHAN: { id: 'yangmingshan', name: '陽明山', icon: '⛰️', desc: '景觀餐廳一級戰區，經典約會勝地。', tags: ['開車/騎車', '高山', '餐廳'] },
+            XIANGSHAN: { id: 'xiangshan', name: '象山', icon: '🐘', desc: '最近距離看台北101，用汗水換美景。', tags: ['捷運+爬山', '運動', '城市景'] },
+            MAOKONG: { id: 'maokong', name: '貓空', icon: '🍵', desc: '搭纜車品茶看夜景，遠離塵囂的寧靜。', tags: ['纜車/開車', '品茗', '氣氛'] }
+        };
+
+        const QUESTIONS = [
+            {
+                id: 1,
+                text: "今天的交通工具方便嗎？",
+                options: [
+                    { text: "我有車/騎車，想去哪都行 (機動性高)", scores: { yangmingshan: 3, hongludi: 3, maokong: 2 } },
+                    { text: "搭捷運或公車，輕鬆一點 (大眾運輸)", scores: { xiangshan: 3, bitan: 3, dadaocheng: 3 } }
+                ]
+            },
+            {
+                id: 2,
+                text: "妳今天穿什麼鞋子呢？好走嗎？",
+                options: [
+                    { text: "平底鞋/球鞋，可以陪你走一段路", scores: { xiangshan: 4, bitan: 2, dadaocheng: 1 } },
+                    { text: "稍微有點跟/靴子，不想走太多路", scores: { yangmingshan: 3, maokong: 3, dadaocheng: 2 } }
+                ]
+            },
+            {
+                id: 3,
+                text: "現在覺得冷嗎？山上可能會比較涼喔。",
+                options: [
+                    { text: "有點怕冷，想去溫暖一點的地方", scores: { dadaocheng: 3, bitan: 3 } }, 
+                    { text: "我有帶外套，吹吹風沒問題", scores: { yangmingshan: 3, hongludi: 3, maokong: 2 } }
+                ]
+            },
+            {
+                id: 4,
+                text: "現在身體的感覺如何？",
+                options: [
+                    { text: "精神還不錯，可以活動活動", scores: { xiangshan: 4, hongludi: 2 } },
+                    { text: "有點累了，只想坐著放空", scores: { maokong: 4, yangmingshan: 3, bitan: 2 } }
+                ]
+            },
+            {
+                id: 5,
+                text: "肚子餓了嗎？",
+                options: [
+                    { text: "有點餓，想吃很多小吃！", scores: { dadaocheng: 4, bitan: 2 } },
+                    { text: "想找個地方坐下來喝飲料或吃正餐", scores: { maokong: 4, yangmingshan: 4 } },
+                    { text: "吃飽了，純粹想看風景", scores: { xiangshan: 2, hongludi: 2 } }
+                ]
+            },
+            {
+                id: 6,
+                text: "今天心情怎麼樣呢？",
+                options: [
+                    { text: "很開心！想去熱鬧一點的地方", scores: { dadaocheng: 3, bitan: 2 } },
+                    { text: "需要療癒...想要安靜一點的空間", scores: { maokong: 4, yangmingshan: 2, hongludi: 2 } }
+                ]
+            },
+            {
+                id: 7,
+                text: "明天需要早起上班嗎？",
+                options: [
+                    { text: "要耶...不能太晚回家", scores: { xiangshan: 2, dadaocheng: 2, bitan: 2 } },
+                    { text: "明天放假/可以晚起，夜深一點也沒關係", scores: { yangmingshan: 3, maokong: 3, hongludi: 3 } }
+                ]
+            },
+            {
+                id: 8,
+                text: "比起燈光，妳更喜歡哪種氛圍？",
+                options: [
+                    { text: "城市的繁華燈火，離我很近", scores: { xiangshan: 4, dadaocheng: 2 } },
+                    { text: "遠眺整片夜景，像寶石一樣", scores: { yangmingshan: 3, hongludi: 4, maokong: 2 } }
+                ]
+            },
+            {
+                id: 9,
+                text: "如果現場人稍微多一點...",
+                options: [
+                    { text: "沒關係，有人氣反而安全熱鬧", scores: { dadaocheng: 3, xiangshan: 3, bitan: 2 } },
+                    { text: "還是希望能有自己的小角落", scores: { maokong: 4, yangmingshan: 2 } }
+                ]
+            },
+            {
+                id: 10,
+                text: "最後一題，今晚最想做的是？",
+                options: [
+                    { text: "好好的大聊特聊，把心事都說出來", scores: { maokong: 3, bitan: 3, yangmingshan: 2 } },
+                    { text: "靜靜地看著風景，享受兩人的時刻", scores: { yangmingshan: 3, hongludi: 3, bitan: 2 } }
+                ]
+            }
+        ];
+
+        // --- Visual Components ---
+
+        // 1. Detailed City Skyline
+        const CitySkyline = ({ scale }) => {
+            return (
+                <div 
+                    className="absolute bottom-[100px] left-0 w-full flex items-end justify-center z-10 transition-transform duration-1000 ease-in-out origin-bottom"
+                    style={{ transform: `scale(${scale})` }}
+                >
+                    <svg viewBox="0 0 400 120" className="w-full h-[180px] opacity-80" preserveAspectRatio="xMidYBottom meet">
+                        <defs>
+                            <linearGradient id="bldgGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#334155" />
+                                <stop offset="100%" stopColor="#0f172a" />
+                            </linearGradient>
+                            <pattern id="windows" x="0" y="0" width="10" height="15" patternUnits="userSpaceOnUse">
+                                <rect x="2" y="2" width="2" height="3" fill="#fbbf24" opacity="0.5" />
+                                <rect x="6" y="8" width="2" height="3" fill="#fbbf24" opacity="0.3" />
+                            </pattern>
+                        </defs>
+                        
+                        {/* Background Mountains */}
+                        <path d="M0,120 L0,90 Q50,60 100,100 T200,80 T300,100 T400,70 L400,120 Z" fill="#1e293b" opacity="0.5" />
+
+                        {/* Buildings Left */}
+                        <rect x="20" y="80" width="30" height="40" fill="url(#bldgGrad)" />
+                        <rect x="30" y="85" width="10" height="35" fill="url(#windows)" />
+                        
+                        <rect x="60" y="60" width="25" height="60" fill="url(#bldgGrad)" />
+                        <rect x="65" y="65" width="15" height="50" fill="url(#windows)" />
+
+                        {/* Ferris Wheel (Miramar style) */}
+                        <g transform="translate(120, 90)">
+                            <circle cx="0" cy="0" r="25" fill="none" stroke="#a855f7" strokeWidth="2" opacity="0.7" />
+                            <line x1="0" y1="-25" x2="0" y2="25" stroke="#a855f7" strokeWidth="1" />
+                            <line x1="-25" y1="0" x2="25" y2="0" stroke="#a855f7" strokeWidth="1" />
+                            <line x1="-18" y1="-18" x2="18" y2="18" stroke="#a855f7" strokeWidth="1" />
+                            <line x1="18" y1="-18" x2="-18" y2="18" stroke="#a855f7" strokeWidth="1" />
+                        </g>
+                        <path d="M110,120 L120,90 L130,120" stroke="#475569" strokeWidth="3" />
+
+                        {/* Taipei 101 Style Building (Center Right) */}
+                        <g transform="translate(260, 20)">
+                            <rect x="-15" y="0" width="30" height="100" fill="url(#bldgGrad)" />
+                            {/* Segments */}
+                            <path d="M-20,20 L20,20 L15,40 L-15,40 Z" fill="#334155" />
+                            <path d="M-20,40 L20,40 L15,60 L-15,60 Z" fill="#334155" />
+                            <path d="M-20,60 L20,60 L15,80 L-15,80 Z" fill="#334155" />
+                            <path d="M-20,80 L20,80 L15,100 L-15,100 Z" fill="#334155" />
+                            {/* Spire */}
+                            <line x1="0" y1="-20" x2="0" y2="0" stroke="#cbd5e1" strokeWidth="2" />
+                            {/* Lights */}
+                            <circle cx="0" cy="0" r="2" fill="red" className="animate-pulse" />
+                        </g>
+
+                        {/* Buildings Right */}
+                        <rect x="310" y="70" width="40" height="50" fill="url(#bldgGrad)" />
+                        <rect x="320" y="75" width="20" height="40" fill="url(#windows)" />
+                        
+                        <rect x="360" y="90" width="20" height="30" fill="url(#bldgGrad)" />
+                    </svg>
+                </div>
+            );
+        };
+
+        // 2. Cute POV Dashboard (Vibrating)
+        const CuteScooterCockpit = ({ isMoving }) => {
+            // Apply different animation classes based on state
+            // Always vibrating (engine idle), shakes more when moving
+            const vibeClass = isMoving ? 'vibe-moving' : 'vibe-idle';
+
+            return (
+                <div 
+                    className={`absolute bottom-0 left-1/2 w-[320px] h-[180px] z-30 transition-none ${vibeClass}`}
+                    style={{ transform: 'translateX(-50%)', marginLeft: '-160px' }} 
+                >
+                    <svg viewBox="0 0 320 180" className="w-full h-full drop-shadow-2xl">
+                        {/* Rounded Dashboard */}
+                        <path d="M40,180 L280,180 L300,120 Q160,90 20,120 Z" fill="#475569" stroke="#1e293b" strokeWidth="2" />
+                        
+                        {/* Center Console */}
+                        <path d="M110,180 L210,180 L200,130 Q160,120 120,130 Z" fill="#334155" />
+                        
+                        {/* Digital Speedometer */}
+                        <rect x="135" y="140" width="50" height="25" rx="5" fill="#0f172a" stroke="#64748b" />
+                        <text x="160" y="158" textAnchor="middle" fill="#38bdf8" fontSize="14" fontFamily="monospace" fontWeight="bold">
+                            {isMoving ? "55" : "18"}
+                        </text>
+                        <text x="160" y="175" textAnchor="middle" fill="#94a3b8" fontSize="8">KM/H</text>
+
+                        {/* Round Mirrors with cute ears decoration */}
+                        <g>
+                            <line x1="60" y1="130" x2="40" y2="70" stroke="#94a3b8" strokeWidth="6" strokeLinecap="round" />
+                            <circle cx="40" cy="70" r="22" fill="#e2e8f0" stroke="#64748b" strokeWidth="3" />
+                            <path d="M30,50 L35,40 L45,48 Z" fill="#64748b" /> {/* Mirror Ear L */}
+                            <path d="M50,48 L60,40 L65,50 Z" fill="#64748b" /> {/* Mirror Ear R */}
+                        </g>
+                        
+                        <g transform="scale(-1, 1) translate(-320, 0)">
+                             <line x1="60" y1="130" x2="40" y2="70" stroke="#94a3b8" strokeWidth="6" strokeLinecap="round" />
+                            <circle cx="40" cy="70" r="22" fill="#e2e8f0" stroke="#64748b" strokeWidth="3" />
+                            <path d="M30,50 L35,40 L45,48 Z" fill="#64748b" />
+                            <path d="M50,48 L60,40 L65,50 Z" fill="#64748b" />
+                        </g>
+
+                        {/* Handles */}
+                        <rect x="20" y="130" width="90" height="24" rx="12" fill="#1e1e1e" transform="rotate(10 65 142)" />
+                        <rect x="210" y="130" width="90" height="24" rx="12" fill="#1e1e1e" transform="rotate(-10 255 142)" />
+
+                        {/* CUTE PAWS (The Driver) */}
+                        <g transform="translate(45, 120) rotate(10)">
+                            <ellipse cx="25" cy="20" rx="22" ry="18" fill="#fde68a" />
+                            <ellipse cx="25" cy="20" rx="18" ry="14" fill="#fcd34d" opacity="0.3" />
+                            <circle cx="12" cy="12" r="6" fill="#fb923c" />
+                            <circle cx="25" cy="6" r="6" fill="#fb923c" />
+                            <circle cx="38" cy="12" r="6" fill="#fb923c" />
+                            <ellipse cx="25" cy="28" rx="10" ry="8" fill="#fb923c" />
+                        </g>
+
+                        <g transform="translate(225, 110) rotate(-10)">
+                            <ellipse cx="25" cy="20" rx="22" ry="18" fill="#fde68a" />
+                             <ellipse cx="25" cy="20" rx="18" ry="14" fill="#fcd34d" opacity="0.3" />
+                            <circle cx="12" cy="12" r="6" fill="#fb923c" />
+                            <circle cx="25" cy="6" r="6" fill="#fb923c" />
+                            <circle cx="38" cy="12" r="6" fill="#fb923c" />
+                            <ellipse cx="25" cy="28" rx="10" ry="8" fill="#fb923c" />
+                        </g>
+                    </svg>
+                </div>
+            );
+        };
+
+        // 3. Romantic Hugging Ending (Refined Details)
+        const HuggingEnding = () => {
+            const hearts = useMemo(() => Array.from({ length: 20 }).map((_, i) => ({
+                id: i,
+                left: 10 + Math.random() * 80,
+                delay: Math.random() * 3,
+                scale: 0.5 + Math.random() * 0.8
+            })), []);
+
+            return (
+                <div className="absolute inset-0 z-50 flex items-center justify-center animate-fade-in bg-slate-900/50 backdrop-blur-sm">
+                    {/* Hearts Effect */}
+                    {hearts.map(h => (
+                        <div 
+                            key={h.id}
+                            className="heart"
+                            style={{
+                                left: `${h.left}%`,
+                                bottom: '100px',
+                                animationDelay: `${h.delay}s`,
+                                fontSize: `${24 * h.scale}px`
+                            }}
+                        >
+                            ❤️
+                        </div>
+                    ))}
+
+                    {/* Hugging Dogs SVG (More Details) */}
+                    <div className="hug-container mt-10 drop-shadow-2xl relative">
+                        <svg width="260" height="240" viewBox="0 0 260 240">
+                            {/* Ground Shadow */}
+                            <ellipse cx="130" cy="210" rx="80" ry="15" fill="#000" opacity="0.3" />
+
+                            {/* DOG 1 (Left): Floppy Ears (Golden Retriever style) */}
+                            <g transform="translate(10, 10)">
+                                {/* Tail - FIXED: Drawn BEFORE body to hide connection. Anchor set to root inside body. */}
+                                {/* Start M60,145 is inside the body. Curve swings left. */}
+                                <path d="M60,145 Q20,135 30,100" stroke="#fde68a" strokeWidth="15" strokeLinecap="round" className="tail-wag" style={{transformOrigin: '60px 145px'}} />
+                                
+                                {/* Body (Drawn on top of tail) */}
+                                <ellipse cx="90" cy="140" rx="40" ry="50" fill="#fde68a" />
+                                
+                                {/* Arm Hugging - FIXED: U-shape scoop. Starts at shoulder (120, 110), dips down (145, 155), ends at other dog's waist (170, 140) */}
+                                <path d="M120,110 Q145,155 170,140" stroke="#fde68a" strokeWidth="18" strokeLinecap="round" fill="none" />
+                                
+                                {/* Head */}
+                                <circle cx="90" cy="80" r="40" fill="#fde68a" />
+                                {/* Ears (Floppy) */}
+                                <path d="M55,60 Q30,80 40,110" stroke="#f59e0b" strokeWidth="18" strokeLinecap="round" fill="none" />
+                                <path d="M125,60 Q150,80 140,90" stroke="#fde68a" strokeWidth="18" strokeLinecap="round" fill="none" /> 
+                            </g>
+
+                            {/* DOG 2 (Right): Perky Ears (Shiba Inu style) */}
+                            <g transform="translate(50, 10)">
+                                {/* Body */}
+                                <ellipse cx="130" cy="140" rx="40" ry="50" fill="#ffedd5" />
+                                
+                                {/* Arm Hugging Back - FIXED: U-shape scoop. Starts at shoulder (100, 110), dips down (75, 155), ends at other dog's waist (50, 140) */}
+                                <path d="M100,110 Q75,155 50,140" stroke="#ffedd5" strokeWidth="18" strokeLinecap="round" fill="none" />
+                                
+                                {/* Head */}
+                                <circle cx="130" cy="80" r="40" fill="#ffedd5" />
+                                {/* Ears (Perky) */}
+                                <path d="M100,50 L110,20 L130,45 Z" fill="#fb923c" stroke="#fb923c" strokeWidth="5" strokeLinejoin="round" />
+                                <path d="M160,50 L150,20 L130,45 Z" fill="#fb923c" stroke="#fb923c" strokeWidth="5" strokeLinejoin="round" />
+                                
+                                {/* Cheek Blush */}
+                                <ellipse cx="100" cy="90" rx="8" ry="5" fill="#fda4af" opacity="0.6" />
+                                <ellipse cx="160" cy="90" rx="8" ry="5" fill="#fda4af" opacity="0.6" />
+                            </g>
+
+                            {/* Faces (Closed Eyes, Happy) */}
+                            <g transform="translate(10, 10)">
+                                <path d="M75,75 Q82,70 89,75" stroke="#4b5563" strokeWidth="3" fill="none" />
+                                <path d="M95,75 Q102,70 109,75" stroke="#4b5563" strokeWidth="3" fill="none" />
+                                <ellipse cx="92" cy="88" rx="6" ry="4" fill="#4b5563" /> {/* Nose */}
+                                <ellipse cx="75" cy="90" rx="8" ry="5" fill="#fda4af" opacity="0.6" /> {/* Blush */}
+                            </g>
+                             <g transform="translate(50, 10)">
+                                <path d="M115,75 Q122,70 129,75" stroke="#4b5563" strokeWidth="3" fill="none" />
+                                <path d="M135,75 Q142,70 149,75" stroke="#4b5563" strokeWidth="3" fill="none" />
+                                <ellipse cx="132" cy="88" rx="6" ry="4" fill="#4b5563" /> {/* Nose */}
+                            </g>
+
+                            {/* Floating Heart between them */}
+                            <path d="M130,50 Q145,30 160,50 Q160,70 130,90 Q100,70 100,50 Q115,30 130,50" fill="#ef4444" className="animate-pulse" />
+                        </svg>
+                    </div>
+                    
+                    <div className="absolute top-16 text-white font-bold text-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-bounce text-center">
+                        終於抱到你了！<br/>
+                        <span className="text-sm font-normal text-pink-300">今晚，我們去這裡看夜景吧</span>
+                    </div>
+                </div>
+            );
+        };
+
+        // 4. Main App
+        const App = () => {
+            const [step, setStep] = useState(0); 
+            const [scores, setScores] = useState({
+                bitan: 0, hongludi: 0, dadaocheng: 0, yangmingshan: 0, xiangshan: 0, maokong: 0
+            });
+            const [isAnimating, setIsAnimating] = useState(false);
+
+            const maxSteps = QUESTIONS.length;
+            const progress = step > maxSteps ? 1 : step / maxSteps;
+            const isFinished = step > maxSteps;
+            
+            const currentDistance = step === 0 ? maxSteps : Math.max(0, maxSteps - (step - 1));
+
+            // Scenery scales from 0.8 to 1.5 as you get closer
+            const sceneryScale = 0.8 + (step === 0 ? 0 : (step / maxSteps) * 0.7);
+
+            const handleStart = () => setStep(1);
+
+            const handleAnswer = (optionScores) => {
+                setIsAnimating(true);
+                const newScores = { ...scores };
+                for (const [key, value] of Object.entries(optionScores)) {
+                    if (newScores[key] !== undefined) newScores[key] += value;
+                }
+                setScores(newScores);
+                
+                // Animation time
+                setTimeout(() => {
+                    setStep(prev => prev + 1);
+                    setIsAnimating(false);
+                }, 800);
+            };
+
+            const getResult = () => {
+                let maxScore = -1;
+                let winner = null;
+                for (const [key, val] of Object.entries(scores)) {
+                    if (val > maxScore) {
+                        maxScore = val;
+                        winner = LOCATIONS[key.toUpperCase()];
+                    }
+                }
+                return winner || LOCATIONS.DADAOCHENG; 
+            };
+
+            const resetQuiz = () => {
+                setStep(0);
+                setScores({ bitan: 0, hongludi: 0, dadaocheng: 0, yangmingshan: 0, xiangshan: 0, maokong: 0 });
+            };
+
+            const stars = useMemo(() => Array.from({ length: 50 }).map((_, i) => ({
+                id: i,
+                left: Math.random() * 100,
+                top: Math.random() * 60,
+                size: Math.random() * 2 + 1,
+                delay: Math.random() * 3
+            })), []);
+
+            return (
+                <div className="flex flex-col h-screen w-full max-w-md mx-auto bg-slate-900 shadow-2xl overflow-hidden relative border-x border-slate-700">
+                    
+                    {/* TOP SECTION: 3D Perspective View or Hugging Scene */}
+                    <div className="h-[45%] relative bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-900 border-b-4 border-slate-950 flex flex-col overflow-hidden">
+                        
+                        {/* Sky Elements */}
+                        {stars.map(star => (
+                            <div key={star.id} className="star" style={{
+                                left: `${star.left}%`, top: `${star.top}%`,
+                                width: `${star.size}px`, height: `${star.size}px`,
+                                animationDelay: `${star.delay}s`
+                            }}/>
+                        ))}
+                        <div className="absolute top-8 right-8 w-16 h-16 bg-yellow-100 rounded-full blur-xl opacity-20"></div>
+
+                        {/* SCENE 1: RIDING (Visible when NOT finished) */}
+                        {!isFinished && (
+                            <>
+                                {/* Detailed City Skyline */}
+                                <CitySkyline scale={sceneryScale} />
+
+                                {/* Road */}
+                                <div className="perspective-container">
+                                    <div className="road-plane">
+                                        <div className={`road-line moving-road-texture ${isAnimating || step===0 ? '' : 'paused-road'}`}></div>
+                                    </div>
+                                </div>
+
+                                {/* POV Dashboard (Centered, Vibrating) */}
+                                <CuteScooterCockpit isMoving={isAnimating || step === 0} />
+                            </>
+                        )}
+
+                        {/* SCENE 2: HUGGING ENDING (Visible ONLY when finished) */}
+                        {isFinished && (
+                            <HuggingEnding />
+                        )}
+                        
+                    </div>
+
+                    {/* BOTTOM SECTION: Quiz Interaction (55% height) */}
+                    <div className="h-[55%] bg-slate-900 p-6 flex flex-col items-center justify-center relative z-20">
+                        
+                        {/* Intro Screen */}
+                        {step === 0 && (
+                            <div className="text-center space-y-6 animate-fade-in w-full">
+                                <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">
+                                    兜風去哪兒？
+                                </h1>
+                                <button 
+                                    onClick={handleStart}
+                                    className="w-full px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold shadow-lg shadow-indigo-500/30 transform transition active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <span>戴上安全帽，出發！</span> ⛑️
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Question Screens */}
+                        {step > 0 && !isFinished && (
+                            <div className="w-full max-w-sm space-y-6 animate-slide-up">
+                                <div className="flex justify-between items-center text-xs font-mono text-slate-500 mb-2 border-b border-slate-700 pb-2">
+                                    <span>QUESTION {step} / {maxSteps}</span>
+                                    <span className="text-pink-400 font-bold">距離目的地 {currentDistance} km</span>
+                                </div>
+                                
+                                <h2 className="text-xl font-bold text-white mb-6 leading-relaxed">
+                                    {QUESTIONS[step-1].text}
+                                </h2>
+
+                                <div className="grid gap-4">
+                                    {QUESTIONS[step-1].options.map((option, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => handleAnswer(option.scores)}
+                                            className="w-full text-left p-4 rounded-2xl bg-slate-800 border border-slate-700 hover:border-pink-400 hover:bg-slate-750 transition-all duration-200 group relative overflow-hidden"
+                                        >
+                                            <span className="relative z-10 text-slate-200 group-hover:text-white font-medium">
+                                                {option.text}
+                                            </span>
+                                            <div className="absolute inset-0 bg-pink-500 opacity-0 group-hover:opacity-10 transition-opacity"></div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Result Screen */}
+                        {isFinished && (() => {
+                            const result = getResult();
+                            return (
+                                <div className="text-center w-full animate-scale-in">
+                                    <div className="inline-block p-4 rounded-full bg-slate-800 mb-4 text-6xl shadow-xl shadow-pink-900/20 border border-slate-700">
+                                        {result.icon}
+                                    </div>
+                                    <h2 className="text-sm text-pink-400 font-bold tracking-widest uppercase mb-1">
+                                        浪漫終點站
+                                    </h2>
+                                    <h1 className="text-3xl font-bold text-white mb-3">
+                                        {result.name}
+                                    </h1>
+                                    <p className="text-slate-300 mb-4 px-4 leading-relaxed">
+                                        {result.desc}
+                                    </p>
+                                    
+                                    <div className="flex flex-wrap justify-center gap-2 mb-8">
+                                        {result.tags.map((tag, i) => (
+                                            <span key={i} className="px-3 py-1 bg-slate-800 rounded-full text-xs text-slate-400 border border-slate-700">
+                                                #{tag}
+                                            </span>
+                                        ))}
+                                    </div>
+
+                                    <button 
+                                        onClick={resetQuiz}
+                                        className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-2xl font-bold transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 12"/></svg>
+                                        再玩一次
+                                    </button>
+                                </div>
+                            );
+                        })()}
+                        
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+
+    <style>
+        /* Animation Utilities */
+        .animate-fade-in { animation: fadeIn 0.8s ease-out; }
+        .animate-slide-up { animation: slideUp 0.5s ease-out; }
+        .animate-scale-in { animation: scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</body>
+</html>
